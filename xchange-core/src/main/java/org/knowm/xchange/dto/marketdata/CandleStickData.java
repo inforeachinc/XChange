@@ -23,12 +23,4 @@ public class CandleStickData implements Serializable {
     public List<CandleStick> getCandleSticks() {
         return Collections.unmodifiableList(candleSticks);
     }
-
-    @Override
-    public String toString() {
-        return "CandleStickData[" +
-                "instrument=" + instrument +
-                ", candleSticks=" + candleSticks +
-                ']';
-    }
 }
