@@ -95,6 +95,11 @@ public class KrakenStreamingExchange extends KrakenExchange implements Streaming
   }
 
   @Override
+  public Observable<Object> disconnectObservable() {
+    return streamingService.subscribeDisconnect();
+  }
+
+  @Override
   public Observable<Throwable> reconnectFailure() {
     return streamingService.subscribeReconnectFailure();
   }
@@ -102,6 +107,22 @@ public class KrakenStreamingExchange extends KrakenExchange implements Streaming
   @Override
   public Observable<State> connectionStateObservable() {
     return streamingService.subscribeConnectionState();
+  }
+
+  public Observable<Object> privateConnectionSuccess() {
+    return privateStreamingService.subscribeConnectionSuccess();
+  }
+
+  public Observable<Throwable> privateReconnectFailure() {
+    return privateStreamingService.subscribeReconnectFailure();
+  }
+
+  public Observable<State> privateConnectionStateObservable() {
+    return privateStreamingService.subscribeConnectionState();
+  }
+
+  public Observable<Object> privateDisconnectObservable() {
+    return privateStreamingService.subscribeDisconnect();
   }
 
   @Override
