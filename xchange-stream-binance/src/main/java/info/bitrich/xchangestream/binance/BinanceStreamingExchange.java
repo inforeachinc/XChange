@@ -9,10 +9,7 @@ import info.bitrich.xchangestream.service.netty.ConnectionStateModel.State;
 import info.bitrich.xchangestream.util.Events;
 import io.reactivex.Completable;
 import io.reactivex.Observable;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
+import org.apache.commons.lang3.StringUtils;
 import org.knowm.xchange.binance.BinanceAuthenticated;
 import org.knowm.xchange.binance.BinanceExchange;
 import org.knowm.xchange.binance.dto.trade.margin.MarginAccountType;
@@ -21,6 +18,14 @@ import org.knowm.xchange.client.ExchangeRestProxyBuilder;
 import org.knowm.xchange.currency.CurrencyPair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
+import static java.util.Collections.emptyMap;
 
 public class BinanceStreamingExchange extends BinanceExchange implements StreamingExchange {
 
@@ -77,6 +82,16 @@ public class BinanceStreamingExchange extends BinanceExchange implements Streami
     }
   }
 
+  public Completable connect(KlineSubscription klineSubscription, ProductSubscription... args) {
+    if (klineSubscription == null || klineSubscription.isEmpty()) {
+      return connect(args);
+    }
+    if (args == null || args.length == 0) {
+      return internalConnect(klineSubscription, ProductSubscription.create().build());
+    }
+    return internalConnect(klineSubscription, args);
+  }
+
   /**
    * Binance streaming API expects connections to multiple channels to be defined at connection
    * time. To define the channels for this connection pass a `ProductSubscription` in at connection
@@ -91,17 +106,21 @@ public class BinanceStreamingExchange extends BinanceExchange implements Streami
     if (args == null || args.length == 0) {
       throw new IllegalArgumentException("Subscriptions must be made at connection time");
     }
+    return internalConnect(new KlineSubscription(emptyMap()), args);
+  }
+
+  private Completable internalConnect(KlineSubscription klineSubscription, ProductSubscription... args) {
     if (streamingService != null) {
       throw new UnsupportedOperationException(
           "Exchange only handles a single connection - disconnect the current connection.");
     }
 
     ProductSubscription subscriptions = args[0];
-    streamingService = createStreamingService(subscriptions);
+    streamingService = createStreamingService(subscriptions, klineSubscription);
 
     List<Completable> completables = new ArrayList<>();
 
-    if (subscriptions.hasUnauthenticated()) {
+    if (subscriptions.hasUnauthenticated() || klineSubscription.hasUnauthenticated()) {
       completables.add(streamingService.connect());
     }
 
@@ -180,9 +199,9 @@ public class BinanceStreamingExchange extends BinanceExchange implements Streami
             : streamingSpotTradeService;
 
     return Completable.concat(completables)
-            .doOnComplete(() -> streamingMarketDataService.openSubscriptions(subscriptions))
-            .doOnComplete(() -> streamingSpotAccountService.openSubscriptions())
-            .doOnComplete(() -> streamingSpotTradeService.openSubscriptions());
+        .doOnComplete(() -> streamingMarketDataService.openSubscriptions(subscriptions, klineSubscription))
+        .doOnComplete(() -> streamingSpotAccountService.openSubscriptions())
+        .doOnComplete(() -> streamingSpotAccountService.openSubscriptions());
   }
 
   private Completable createAndConnectSpotUserDataService(String listenKey) {
@@ -195,8 +214,8 @@ public class BinanceStreamingExchange extends BinanceExchange implements Streami
             () -> {
               LOG.info("Connected to authenticated web socket");
               spotUserDataChannel.onChangeListenKey(
-                  newListenKey -> {
-                    spotUserDataStreamingService
+                  newListenKey ->
+                          spotUserDataStreamingService
                         .disconnect()
                         .doOnComplete(
                             () -> {
@@ -208,37 +227,38 @@ public class BinanceStreamingExchange extends BinanceExchange implements Streami
                                         streamingSpotTradeService.setUserDataStreamingService(
                                                 spotUserDataStreamingService);
                                       });
-                            });
-                  });
+                            })
+                  );
             });
   }
 
+
   private Completable createAndConnectMarginUserDataService(String listenKey) {
     marginUserDataStreamingService =
-        BinanceUserDataStreamingService.create(getStreamingBaseUri(), listenKey);
+            BinanceUserDataStreamingService.create(getStreamingBaseUri(), listenKey);
     applyStreamingSpecification(getExchangeSpecification(), marginUserDataStreamingService);
     return marginUserDataStreamingService
-        .connect()
-        .doOnComplete(
-            () -> {
-              LOG.info("Connected to margin authenticated web socket");
-              marginUserDataChannel.onChangeListenKey(
-                  newListenKey -> {
-                    marginUserDataStreamingService
-                        .disconnect()
-                        .doOnComplete(
-                            () -> {
-                              createAndConnectMarginUserDataService(newListenKey)
-                                  .doOnComplete(
-                                      () -> {
-                                        streamingMarginAccountService.setUserDataStreamingService(
-                                                marginUserDataStreamingService);
-                                        streamingMarginTradeService.setUserDataStreamingService(
-                                                marginUserDataStreamingService);
-                                      });
-                            });
-                  });
-            });
+            .connect()
+            .doOnComplete(
+                    () -> {
+                      LOG.info("Connected to margin authenticated web socket");
+                      marginUserDataChannel.onChangeListenKey(
+                              newListenKey -> {
+                                marginUserDataStreamingService
+                                        .disconnect()
+                                        .doOnComplete(
+                                                () -> {
+                                                  createAndConnectMarginUserDataService(newListenKey)
+                                                          .doOnComplete(
+                                                                  () -> {
+                                                                    streamingMarginAccountService.setUserDataStreamingService(
+                                                                            marginUserDataStreamingService);
+                                                                    streamingMarginTradeService.setUserDataStreamingService(
+                                                                            marginUserDataStreamingService);
+                                                                  });
+                                                });
+                              });
+                    });
   }
 
   private Completable createAndConnectIsolatedMarginUserDataService(String listenKey) {
@@ -363,12 +383,27 @@ public class BinanceStreamingExchange extends BinanceExchange implements Streami
     return streamingIsolatedMarginTradeService;
   }
 
-  protected BinanceStreamingService createStreamingService(ProductSubscription subscription) {
+  protected BinanceStreamingService createStreamingService(ProductSubscription subscription, KlineSubscription klineSubscription) {
     String path =
-        getStreamingBaseUri() + "stream?streams=" + buildSubscriptionStreams(subscription);
-    BinanceStreamingService streamingService = new BinanceStreamingService(this, path, subscription);
+        getStreamingBaseUri() + "stream?streams=" + buildSubscriptionStreams(subscription, klineSubscription);
+    BinanceStreamingService streamingService = new BinanceStreamingService(this, path, subscription, klineSubscription);
     applyStreamingSpecification(getExchangeSpecification(), streamingService);
     return streamingService;
+  }
+
+  private String buildSubscriptionStreams(ProductSubscription subscription, KlineSubscription klineSubscription) {
+    return Stream.concat(
+            Arrays.stream(buildSubscriptionStreams(subscription).split("/")),
+            buildSubscriptionStreams(klineSubscription))
+        .filter(StringUtils::isNotEmpty)
+        .collect(Collectors.joining("/"));
+  }
+
+  private Stream<String> buildSubscriptionStreams(KlineSubscription klineSubscription) {
+    return klineSubscription.getKlines().entrySet()
+        .stream().flatMap(entry ->
+            entry.getValue().stream()
+                .map(interval -> getPrefix(entry.getKey()) + "@kline_" + interval.code()));
   }
 
   protected String getStreamingBaseUri() {
@@ -407,7 +442,11 @@ public class BinanceStreamingExchange extends BinanceExchange implements Streami
 
   private static Stream<String> subscriptionStrings(List<CurrencyPair> currencyPairs) {
     return currencyPairs.stream()
-        .map(pair -> String.join("", pair.toString().split("/")).toLowerCase());
+        .map(BinanceStreamingExchange::getPrefix);
+  }
+
+  private static String getPrefix(CurrencyPair pair) {
+    return String.join("", pair.toString().split("/")).toLowerCase();
   }
 
   @Override

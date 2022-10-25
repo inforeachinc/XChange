@@ -6,11 +6,13 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+
 import org.knowm.xchange.binance.dto.account.AssetDetail;
 import org.knowm.xchange.binance.dto.marketdata.BinanceKline;
 import org.knowm.xchange.binance.dto.marketdata.BinancePriceQuantity;
@@ -269,24 +271,32 @@ public class BinanceAdapters {
     }
   }
 
-  public static CandleStickData adaptCandleStickData(Instrument instrument, List<BinanceKline> klines) {
-    List<CandleStick> candleSticks = klines.stream()
-            .map(BinanceAdapters::adaptCandleStick)
-            .collect(Collectors.toList());
-    return new CandleStickData(instrument, candleSticks);
-  }
+  /**
+   * @param klines
+   * @param currencyPair
+   * @return
+   */
+  public static CandleStickData adaptBinanceCandleStickData(
+      List<BinanceKline> klines, CurrencyPair currencyPair) {
 
-  private static CandleStick adaptCandleStick(BinanceKline kline) {
-    return new CandleStick.Builder()
-            .timestamp(new Date(kline.getCloseTime()))
-            .open(kline.getOpenPrice())
-            .high(kline.getHighPrice())
-            .low(kline.getLowPrice())
-            .close(kline.getClosePrice())
-            .last(kline.getClosePrice())
-            .volume(kline.getVolume())
-            .quotaVolume(kline.getQuoteAssetVolume())
-            .vwap(kline.getAveragePrice())
-            .build();
+    CandleStickData candleStickData = null;
+    if (klines.size() != 0) {
+      List<CandleStick> candleSticks = new ArrayList<>();
+      for (BinanceKline chartData : klines) {
+        candleSticks.add(
+            new CandleStick.Builder()
+                .timestamp(new Date(chartData.getCloseTime()))
+                .open(chartData.getOpenPrice())
+                .high(chartData.getHighPrice())
+                .low(chartData.getLowPrice())
+                .close(chartData.getClosePrice())
+                .volume(chartData.getVolume())
+                .quotaVolume(chartData.getQuoteAssetVolume())
+                .build());
+      }
+      candleStickData = new CandleStickData(currencyPair, candleSticks);
+    }
+
+    return candleStickData;
   }
 }

@@ -78,7 +78,7 @@ public class CoinbaseProStreamingExchange extends CoinbaseProExchange implements
 
     boolean useSandbox =
         Boolean.TRUE.equals(
-            exchangeSpecification.getExchangeSpecificParametersItem(Parameters.PARAM_USE_SANDBOX));
+            exchangeSpecification.getExchangeSpecificParametersItem(USE_SANDBOX));
     boolean usePrime =
         Boolean.TRUE.equals(
             exchangeSpecification.getExchangeSpecificParametersItem(Parameters.PARAM_USE_PRIME));
@@ -116,7 +116,9 @@ public class CoinbaseProStreamingExchange extends CoinbaseProExchange implements
     CoinbaseProStreamingService service = streamingService;
     streamingService = null;
     streamingMarketDataService = null;
-    return service != null ? service.disconnect() : Completable.complete();
+    return service != null
+            ? service.disconnect()
+            : Completable.complete();
   }
 
   @Override

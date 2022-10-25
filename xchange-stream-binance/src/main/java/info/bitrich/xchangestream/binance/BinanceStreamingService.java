@@ -10,6 +10,10 @@ import info.bitrich.xchangestream.service.netty.WebSocketClientCompressionAllowC
 import io.github.resilience4j.ratelimiter.RateLimiter;
 import io.github.resilience4j.ratelimiter.RateLimiterConfig;
 import io.netty.handler.codec.http.websocketx.extensions.WebSocketClientExtensionHandler;
+import org.knowm.xchange.binance.BinanceExchange;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -19,8 +23,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 public class BinanceStreamingService extends JsonNettyStreamingService {
 
@@ -30,6 +32,7 @@ public class BinanceStreamingService extends JsonNettyStreamingService {
   private static final String IDENTIFIER = "id";
 
   private final ProductSubscription productSubscription;
+  private final KlineSubscription klineSubscription;
 
   private boolean isLiveSubscriptionEnabled = false;
   private Map<Integer, BinanceWebSocketSubscriptionMessage> liveSubscriptionMessage =
@@ -37,9 +40,10 @@ public class BinanceStreamingService extends JsonNettyStreamingService {
 
   private RateLimiter rateLimiter;
 
-  public BinanceStreamingService(BinanceStreamingExchange exchange, String baseUri, ProductSubscription productSubscription) {
+  public BinanceStreamingService(BinanceExchange exchange, String baseUri, ProductSubscription productSubscription, KlineSubscription klineSubscription) {
     super(baseUri, Integer.MAX_VALUE);
     this.productSubscription = productSubscription;
+    this.klineSubscription = klineSubscription;
 
     if (exchange.getExchangeSpecification().getResilience().isRateLimiterEnabled()) {
       // 1 message per second
@@ -55,12 +59,14 @@ public class BinanceStreamingService extends JsonNettyStreamingService {
   public BinanceStreamingService(
       String baseUri,
       ProductSubscription productSubscription,
+      KlineSubscription klineSubscription,
       int maxFramePayloadLength,
       Duration connectionTimeout,
       Duration retryDuration,
       int idleTimeoutSeconds) {
     super(baseUri, maxFramePayloadLength, connectionTimeout, retryDuration, idleTimeoutSeconds);
     this.productSubscription = productSubscription;
+    this.klineSubscription = klineSubscription;
   }
 
   @Override
@@ -208,6 +214,10 @@ public class BinanceStreamingService extends JsonNettyStreamingService {
    */
   public ProductSubscription getProductSubscription() {
     return productSubscription;
+  }
+
+  public KlineSubscription getKlineSubscription() {
+    return klineSubscription;
   }
 
   public void enableLiveSubscription() {

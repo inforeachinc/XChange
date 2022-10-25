@@ -41,24 +41,13 @@ public enum KlineInterval {
     return code;
   }
 
-  public static KlineInterval getIntervalFromSecs(long seconds) {
-    long millis = seconds * 1000;
-
+  public static KlineInterval getPeriodTypeFromSecs(long periodInSecs) {
     KlineInterval result = null;
-    for (KlineInterval interval : KlineInterval.values()) {
-      if (interval.millis == millis) {
-        result = interval;
+    for (KlineInterval period : KlineInterval.values()) {
+      if (period.millis == periodInSecs * 1000) {
+        result = period;
         break;
       }
-    }
-    return result;
-  }
-
-  public static long[] getSupportedPeriodsInSecs() {
-    long[] result = new long[KlineInterval.values().length];
-    int index = 0;
-    for (KlineInterval interval : KlineInterval.values()) {
-      result[index++] = interval.getMillis() / 1000;
     }
     return result;
   }
